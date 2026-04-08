@@ -1,0 +1,9 @@
+{
+  "name": "nopi-financial-api",
+  "version": "1.0.0",
+  "description": "NOPI Financial Data API",
+  "dependencies": {
+    "node-fetch": "^2.6.7",
+    "xlsx": "^0.18.5"
+  }
+}
