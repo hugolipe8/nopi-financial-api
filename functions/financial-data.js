@@ -49,7 +49,6 @@ exports.handler = async (event) => {
     // ── Folha MFC ─────────────────────────────────────────────────────────────
     const mfc = XLSX.utils.sheet_to_json(wb.Sheets["MFC"], { header: 1, defval: "" });
 
-    // Bancos individuais (rows 3-12)
     const bancos = [];
     for (let i = 3; i <= 12; i++) {
       const row = mfc[i];
@@ -60,24 +59,20 @@ exports.handler = async (event) => {
       bancos.push(entry);
     }
 
-    // Fiel Depositário (row 13)
     const fielRow = mfc[13];
     const fielDepositario = { nome: "FIEL DEPOSITÁRIO", saldoInicial: toNum(fielRow[1]) };
     MONTHS.forEach((m, idx) => { fielDepositario[m] = toNum(fielRow[idx + 2]); });
 
-    // Saldo (row 14) — soma bancos sem fiel
     const saldoRow = mfc[14];
     const saldo = { nome: "SALDO", saldoInicial: toNum(saldoRow[1]) };
     MONTHS.forEach((m, idx) => { saldo[m] = toNum(saldoRow[idx + 2]); });
 
-    // Variação (row 15)
     const variacaoRow = mfc[15];
     const variacao = { nome: "VARIAÇÃO" };
     MONTHS.forEach((m, idx) => { variacao[m] = toNum(variacaoRow[idx + 2]); });
 
     const mapaFinanceiros = { bancos, fielDepositario, saldo, variacao };
 
-    // Mapa de Fluxos de Caixa (rows 18-41)
     const linhasCaixa = [
       { row: 19, nome: "Caixa Inicial", tipo: "header" },
       { row: 21, nome: "Recebimentos de Clientes", tipo: "recebimento" },
@@ -107,10 +102,10 @@ exports.handler = async (event) => {
     // ── Folha DR ──────────────────────────────────────────────────────────────
     const dr = XLSX.utils.sheet_to_json(wb.Sheets["DR"], { header: 1, defval: "" });
 
-    // Resultado Económico YTD — célula O36 (row 35, col 14)
+    // Resultado YTD — célula O36 (row 35, col 14)
     const resultadoYTD = toNum(dr[35][14]);
 
-    // Despesas Fixas detalhadas (rows 4-26)
+    // Despesas Fixas detalhadas (rows 4-26) — inclui média (col 15)
     const despesasFixas = [];
     for (let i = 4; i <= 26; i++) {
       const row = dr[i];
@@ -118,11 +113,12 @@ exports.handler = async (event) => {
       if (!nome || nome === "nan") continue;
       const entry = { nome };
       MONTHS.forEach((m, idx) => { entry[m] = toNum(row[idx + 2]); });
+      entry.media = toNum(row[15]);
       entry.total = toNum(row[14]);
       despesasFixas.push(entry);
     }
 
-    // Resumo DR — linhas principais
+    // Resumo DR — linhas principais — inclui média (col 15)
     const linhasDR = [
       { row: 3,  nome: "Total Despesas Fixas", tipo: "subtotal" },
       { row: 27, nome: "Total Despesas Variáveis", tipo: "subtotal" },
@@ -135,34 +131,33 @@ exports.handler = async (event) => {
       const r = dr[row] || [];
       const entry = { nome, tipo };
       MONTHS.forEach((m, idx) => { entry[m] = toNum(r[idx + 2]); });
+      entry.media = toNum(r[15]);
       entry.total = toNum(r[14]);
       return entry;
     });
 
-    // Previsão de Despesas 2026 — tabela completa (rows 4-11, cols 19-25)
+    // Previsão de Despesas 2026 (rows 4-11, cols 19-25)
     const previsao = [];
     for (let i = 4; i <= 11; i++) {
       const row = dr[i];
       const nome = String(row[19]).trim();
       if (!nome || nome === "nan") continue;
+      const orcamento = toNum(row[24]);
+      const real = toNum(row[25]);
       previsao.push({
         nome,
         nopiI:           toNum(row[20]),
         nopiII:          toNum(row[21]),
         nopiIII:         toNum(row[22]),
         totalNopi:       toNum(row[23]),
-        orcamentoMensal: toNum(row[24]),
-        resultadoMensal: toNum(row[25]),
-        desvio:          toNum(row[24]) != null && toNum(row[25]) != null
-                           ? Math.round((toNum(row[25]) - toNum(row[24])) * 100) / 100
-                           : null,
-        desvioPercent:   toNum(row[24]) != null && toNum(row[24]) !== 0 && toNum(row[25]) != null
-                           ? Math.round(((toNum(row[25]) - toNum(row[24])) / toNum(row[24])) * 10000) / 100
-                           : null,
+        orcamentoMensal: orcamento,
+        resultadoMensal: real,
+        desvio:          orcamento != null && real != null ? Math.round((real - orcamento) * 100) / 100 : null,
+        desvioPercent:   orcamento != null && orcamento !== 0 && real != null
+                           ? Math.round(((real - orcamento) / orcamento) * 10000) / 100 : null,
       });
     }
 
-    // Total previsão (row 11)
     const totalPrevisao = {
       nome: "TOTAL",
       nopiI:           toNum(dr[11][20]),
