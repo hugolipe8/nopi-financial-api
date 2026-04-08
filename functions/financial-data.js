@@ -21,7 +21,7 @@ const CORS = {
 };
 
 function toNum(v) {
-  if (v == null || v === "" || v === "nan") return null;
+  if (v == null || v === "" || String(v) === "nan") return null;
   const n = parseFloat(String(v).replace(",", "."));
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
@@ -49,9 +49,8 @@ exports.handler = async (event) => {
     // ── Folha MFC ─────────────────────────────────────────────────────────────
     const mfc = XLSX.utils.sheet_to_json(wb.Sheets["MFC"], { header: 1, defval: "" });
 
-    // Mapa de Fluxos Financeiros (rows 2-15)
+    // Bancos individuais (rows 3-12)
     const bancos = [];
-    const bancosRows = ["BPI","BPI2","BPI3","CGD","NOVO BANCO","SANTANDER","BCP","EUROBIC","BANKINTER","NUMERARIO"];
     for (let i = 3; i <= 12; i++) {
       const row = mfc[i];
       const nome = String(row[0]).trim();
@@ -60,14 +59,23 @@ exports.handler = async (event) => {
       MONTHS.forEach((m, idx) => { entry[m] = toNum(row[idx + 2]); });
       bancos.push(entry);
     }
-    const fiel = { nome: "FIEL DEPOSITÁRIO", saldoInicial: toNum(mfc[13][1]) };
-    MONTHS.forEach((m, idx) => { fiel[m] = toNum(mfc[13][idx + 2]); });
-    const saldo = { nome: "SALDO", saldoInicial: toNum(mfc[14][1]) };
-    MONTHS.forEach((m, idx) => { saldo[m] = toNum(mfc[14][idx + 2]); });
-    const variacao = { nome: "VARIAÇÃO" };
-    MONTHS.forEach((m, idx) => { variacao[m] = toNum(mfc[15][idx + 2]); });
 
-    const mapaFinanceiros = { bancos, fiel, saldo, variacao };
+    // Fiel Depositário (row 13)
+    const fielRow = mfc[13];
+    const fielDepositario = { nome: "FIEL DEPOSITÁRIO", saldoInicial: toNum(fielRow[1]) };
+    MONTHS.forEach((m, idx) => { fielDepositario[m] = toNum(fielRow[idx + 2]); });
+
+    // Saldo (row 14) — soma bancos sem fiel
+    const saldoRow = mfc[14];
+    const saldo = { nome: "SALDO", saldoInicial: toNum(saldoRow[1]) };
+    MONTHS.forEach((m, idx) => { saldo[m] = toNum(saldoRow[idx + 2]); });
+
+    // Variação (row 15)
+    const variacaoRow = mfc[15];
+    const variacao = { nome: "VARIAÇÃO" };
+    MONTHS.forEach((m, idx) => { variacao[m] = toNum(variacaoRow[idx + 2]); });
+
+    const mapaFinanceiros = { bancos, fielDepositario, saldo, variacao };
 
     // Mapa de Fluxos de Caixa (rows 18-41)
     const linhasCaixa = [
@@ -99,7 +107,10 @@ exports.handler = async (event) => {
     // ── Folha DR ──────────────────────────────────────────────────────────────
     const dr = XLSX.utils.sheet_to_json(wb.Sheets["DR"], { header: 1, defval: "" });
 
-    // Tabela 1 DR — Demonstração de Resultados (rows 2-35)
+    // Resultado Económico YTD — célula O36 (row 35, col 14)
+    const resultadoYTD = toNum(dr[35][14]);
+
+    // Despesas Fixas detalhadas (rows 4-26)
     const despesasFixas = [];
     for (let i = 4; i <= 26; i++) {
       const row = dr[i];
@@ -111,6 +122,7 @@ exports.handler = async (event) => {
       despesasFixas.push(entry);
     }
 
+    // Resumo DR — linhas principais
     const linhasDR = [
       { row: 3,  nome: "Total Despesas Fixas", tipo: "subtotal" },
       { row: 27, nome: "Total Despesas Variáveis", tipo: "subtotal" },
@@ -127,27 +139,44 @@ exports.handler = async (event) => {
       return entry;
     });
 
-    // Tabela 2 DR — Previsão de Despesas 2026 (cols 19-25, rows 3-11)
+    // Previsão de Despesas 2026 — tabela completa (rows 4-11, cols 19-25)
     const previsao = [];
-    for (let i = 3; i <= 11; i++) {
+    for (let i = 4; i <= 11; i++) {
       const row = dr[i];
       const nome = String(row[19]).trim();
       if (!nome || nome === "nan") continue;
       previsao.push({
         nome,
-        nopiI:          toNum(row[20]),
-        nopiII:         toNum(row[21]),
-        nopiIII:        toNum(row[22]),
-        totalNopi:      toNum(row[23]),
+        nopiI:           toNum(row[20]),
+        nopiII:          toNum(row[21]),
+        nopiIII:         toNum(row[22]),
+        totalNopi:       toNum(row[23]),
         orcamentoMensal: toNum(row[24]),
         resultadoMensal: toNum(row[25]),
+        desvio:          toNum(row[24]) != null && toNum(row[25]) != null
+                           ? Math.round((toNum(row[25]) - toNum(row[24])) * 100) / 100
+                           : null,
+        desvioPercent:   toNum(row[24]) != null && toNum(row[24]) !== 0 && toNum(row[25]) != null
+                           ? Math.round(((toNum(row[25]) - toNum(row[24])) / toNum(row[24])) * 10000) / 100
+                           : null,
       });
     }
+
+    // Total previsão (row 11)
+    const totalPrevisao = {
+      nome: "TOTAL",
+      nopiI:           toNum(dr[11][20]),
+      nopiII:          toNum(dr[11][21]),
+      nopiIII:         toNum(dr[11][22]),
+      totalNopi:       toNum(dr[11][23]),
+      orcamentoMensal: toNum(dr[11][24]),
+      resultadoMensal: toNum(dr[11][25]),
+    };
 
     return json(200, {
       ano: 2026,
       mfc: { mapaFinanceiros, mapaCaixa },
-      dr:  { despesasFixas, resumoDR, previsao },
+      dr:  { resultadoYTD, despesasFixas, resumoDR, previsao, totalPrevisao },
     });
 
   } catch (err) {
