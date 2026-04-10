@@ -105,20 +105,24 @@ exports.handler = async (event) => {
     // Resultado YTD — célula O36 (row 35, col 14)
     const resultadoYTD = toNum(dr[35][14]);
 
-    // Despesas Fixas detalhadas (rows 4-26) — inclui média (col 15)
+    // Despesas Fixas detalhadas (rows 4-26)
+    // col 0 = categoriaId (coluna A), col 1 = nome (coluna B)
     const despesasFixas = [];
     for (let i = 4; i <= 26; i++) {
       const row = dr[i];
       const nome = String(row[1]).trim();
       if (!nome || nome === "nan") continue;
-      const entry = { nome };
+      const entry = {
+        nome,
+        categoriaId: toNum(row[0]),  // ← coluna A = ID da categoria
+      };
       MONTHS.forEach((m, idx) => { entry[m] = toNum(row[idx + 2]); });
       entry.media = toNum(row[15]);
       entry.total = toNum(row[14]);
       despesasFixas.push(entry);
     }
 
-    // Resumo DR — linhas principais — inclui média (col 15)
+    // Resumo DR — linhas principais
     const linhasDR = [
       { row: 3,  nome: "Total Despesas Fixas", tipo: "subtotal" },
       { row: 27, nome: "Total Despesas Variáveis", tipo: "subtotal" },
@@ -137,6 +141,7 @@ exports.handler = async (event) => {
     });
 
     // Previsão de Despesas 2026 (rows 4-11, cols 19-25)
+    // col 18 = categoriaId (coluna S), col 19 = nome (coluna T)
     const previsao = [];
     for (let i = 4; i <= 11; i++) {
       const row = dr[i];
@@ -146,6 +151,7 @@ exports.handler = async (event) => {
       const real = toNum(row[25]);
       previsao.push({
         nome,
+        categoriaId:     toNum(row[18]),  // ← coluna S = ID da categoria
         nopiI:           toNum(row[20]),
         nopiII:          toNum(row[21]),
         nopiIII:         toNum(row[22]),
