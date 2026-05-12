@@ -18,6 +18,9 @@ const CORS = {
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
 };
 
+// Cabeçalhos de agrupamento da pivot table a ignorar
+const IGNORAR = new Set(["c","ct","f","fd","fin","pf","q","nopi","total geral","(em branco)"]);
+
 function toNum(v) {
   if (v == null || v === "" || String(v) === "nan") return null;
   const n = parseFloat(String(v).replace(",", "."));
@@ -56,10 +59,17 @@ exports.handler = async (event) => {
 
     for (let i = 5; i < rows.length; i++) {
       const nome = toStr(rows[i][0]);
-      const valor = toNum(rows[i][3]);
-
       if (!nome) continue;
+
+      // Ignorar cabeçalhos de agrupamento da pivot
+      if (IGNORAR.has(nome.toLowerCase())) continue;
+
+      // Ignorar referências de processo (ex: 2026/162)
+      if (/^\d{4}\/\d+$/.test(nome)) continue;
+
+      const valor = toNum(rows[i][3]);
       if (valor === null) continue;
+
       // Filtrar igual à Motherboard: só valores < -1 ou > 1
       if (valor > -1 && valor < 1) continue;
 
