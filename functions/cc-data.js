@@ -18,8 +18,18 @@ const CORS = {
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
 };
 
-// Cabeçalhos de agrupamento da pivot table a ignorar
-const IGNORAR = new Set(["c","ct","f","fd","fin","pf","q","nopi","total geral","(em branco)"]);
+// Mapeamento de categorias
+const CATEGORIAS = {
+  "c":   "Clientes",
+  "ct":  "Consultores",
+  "f":   "Entidades Financeiras",
+  "fd":  "Reserva",
+  "fin": "Financiamentos",
+  "pf":  "Participações Financeiras",
+};
+
+// Linhas a ignorar completamente
+const IGNORAR = new Set(["q","nopi","total geral","(em branco)"]);
 
 function toNum(v) {
   if (v == null || v === "" || String(v) === "nan") return null;
@@ -56,16 +66,25 @@ exports.handler = async (event) => {
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
     const contaCorrente = [];
+    let categoriaAtual = null;
 
     for (let i = 5; i < rows.length; i++) {
       const nome = toStr(rows[i][0]);
       if (!nome) continue;
 
-      // Ignorar cabeçalhos de agrupamento da pivot
-      if (IGNORAR.has(nome.toLowerCase())) continue;
+      const nomeLower = nome.toLowerCase();
+
+      // Ignorar linhas irrelevantes
+      if (IGNORAR.has(nomeLower)) continue;
 
       // Ignorar referências de processo (ex: 2026/162)
       if (/^\d{4}\/\d+$/.test(nome)) continue;
+
+      // Detetar mudança de categoria
+      if (CATEGORIAS[nomeLower]) {
+        categoriaAtual = CATEGORIAS[nomeLower];
+        continue;
+      }
 
       const valor = toNum(rows[i][3]);
       if (valor === null) continue;
@@ -73,10 +92,21 @@ exports.handler = async (event) => {
       // Filtrar igual à Motherboard: só valores < -1 ou > 1
       if (valor > -1 && valor < 1) continue;
 
-      contaCorrente.push({ nome, valor });
+      contaCorrente.push({
+        nome,
+        valor,
+        categoria: categoriaAtual || "Outro",
+      });
     }
 
-    return json(200, { contaCorrente });
+    // Agrupar por categoria
+    const porCategoria = {};
+    contaCorrente.forEach(({ nome, valor, categoria }) => {
+      if (!porCategoria[categoria]) porCategoria[categoria] = [];
+      porCategoria[categoria].push({ nome, valor });
+    });
+
+    return json(200, { contaCorrente, porCategoria });
 
   } catch (err) {
     console.error("[cc-data]", err.message);
