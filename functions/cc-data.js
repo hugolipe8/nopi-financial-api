@@ -52,9 +52,6 @@ exports.handler = async (event) => {
     if (!ws) throw new Error('Folha "CC" não encontrada.');
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-    // Ler todas as linhas da folha CC
-    // Col 0 = nome/entidade, Col 3 = Soma de Campo1
-    // Ignorar linhas de cabeçalho (rows 0-4) e linhas sem nome
     const contaCorrente = [];
 
     for (let i = 5; i < rows.length; i++) {
@@ -62,6 +59,9 @@ exports.handler = async (event) => {
       const valor = toNum(rows[i][3]);
 
       if (!nome) continue;
+      if (valor === null) continue;
+      // Filtrar igual à Motherboard: só valores < -1 ou > 1
+      if (valor > -1 && valor < 1) continue;
 
       contaCorrente.push({ nome, valor });
     }
