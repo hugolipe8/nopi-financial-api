@@ -5,20 +5,16 @@
  */
 const fetch = require("node-fetch");
 const XLSX  = require("xlsx");
-
 const EXCEL_URL = [
-  "https://www.dropbox.com/scl/fi/y4i9m6v4q8snd2m3qljoh/Motherboard-2026.xlsx",
-  "?rlkey=4px2hpxbg8p6fot2l65bkdamg&st=4h2vu72e&dl=1",
+  "https://www.dropbox.com/scl/fi/q1e1l6enrinhm8ileg903/Motherboard-2026.xlsx",
+  "?rlkey=lke29p1fipcrj8l4dl3hqb8gi&st=hrc3v22k&dl=1",
 ].join("");
-
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
 };
-
-// Colunas relevantes (0-indexed)
 const COL = {
   DATA:      59,
   ENTIDADE:  62,
@@ -29,8 +25,6 @@ const COL = {
   MES:       44,
   ANO:       51,
 };
-
-// Categorias a incluir
 const CATEGORIAS = [
   "SALARIOS",
   "GERENCIA",
@@ -50,18 +44,14 @@ const CATEGORIAS = [
   "IMPRESSORAS",
   "AGUA",
 ];
-
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
                "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-
 const toNum = (v) => {
   if (v == null || v === "" || String(v) === "nan") return null;
   const n = parseFloat(String(v).replace(",", "."));
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 };
-
 const toStr = (v) => v != null && v !== "" ? String(v).trim() : null;
-
 const toDate = (v) => {
   if (!v) return null;
   if (v instanceof Date) return v.toISOString().split("T")[0];
@@ -73,7 +63,6 @@ const toDate = (v) => {
   }
   return String(v).split("T")[0];
 };
-
 function json(statusCode, body) {
   return {
     statusCode,
@@ -81,12 +70,10 @@ function json(statusCode, body) {
     body: JSON.stringify(body),
   };
 }
-
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: CORS, body: "" };
   }
-
   try {
     const res = await fetch(EXCEL_URL, { timeout: 45_000 });
     if (!res.ok) throw new Error(`Dropbox HTTP ${res.status}`);
@@ -94,56 +81,33 @@ exports.handler = async (event) => {
     const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
     const rows = XLSX.utils.sheet_to_json(wb.Sheets["MOTHER"], { header: 1, defval: null });
     const dataRows = rows.slice(1);
-
-    // Estrutura: { [categoria]: { [ano]: { [mes]: { total: number, linhas: [] } } } }
     const resultado = {};
-
     CATEGORIAS.forEach(cat => { resultado[cat] = {}; });
-
     dataRows.forEach(r => {
       const cat = toStr(r[COL.CATEGORIA])?.toUpperCase();
       if (!cat || !CATEGORIAS.includes(cat)) return;
-
       const data = toDate(r[COL.DATA]);
       if (!data) return;
-
       const ano = parseInt(data.split("-")[0]);
       const mes = parseInt(data.split("-")[1]);
       if (!ano || !mes) return;
-
       const total = toNum(r[COL.TOTAL]);
       if (total == null) return;
-
       const entidade = toStr(r[COL.ENTIDADE]) || "—";
       const nomeMes = MESES[mes - 1];
-
       if (!resultado[cat][ano]) resultado[cat][ano] = {};
       if (!resultado[cat][ano][nomeMes]) {
         resultado[cat][ano][nomeMes] = { total: 0, linhas: [] };
       }
-
       resultado[cat][ano][nomeMes].total = Math.round(
         (resultado[cat][ano][nomeMes].total + total) * 100
       ) / 100;
-
-      resultado[cat][ano][nomeMes].linhas.push({
-        data,
-        entidade,
-        total,
-      });
+      resultado[cat][ano][nomeMes].linhas.push({ data, entidade, total });
     });
-
-    // Converter para formato mais simples para o frontend
-    // { categoria: string, anos: { [ano]: { [mes]: { total, linhas } } } }[]
     const despesas = CATEGORIAS
       .filter(cat => Object.keys(resultado[cat]).length > 0)
-      .map(cat => ({
-        categoria: cat,
-        anos: resultado[cat],
-      }));
-
+      .map(cat => ({ categoria: cat, anos: resultado[cat] }));
     return json(200, { despesas });
-
   } catch (err) {
     console.error("[expenses-data]", err.message);
     return json(500, { erro: err.message });
