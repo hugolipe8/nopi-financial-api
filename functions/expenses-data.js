@@ -6,8 +6,8 @@
 const fetch = require("node-fetch");
 const XLSX  = require("xlsx");
 const EXCEL_URL = [
-  "https://www.dropbox.com/scl/fi/q1e1l6enrinhm8ileg903/Motherboard-2026.xlsx",
-  "?rlkey=lke29p1fipcrj8l4dl3hqb8gi&st=hrc3v22k&dl=1",
+  "https://www.dropbox.com/scl/fi/enjzob4mlin3k2g8o31yh/Motherboard-2026.xlsx",
+  "?rlkey=w0trw0ww8wlzqha2pizk1y599&st=ybpsae9d&dl=1",
 ].join("");
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
